@@ -29,6 +29,7 @@ pub struct Sprite<I: ImageSize> {
     flip_x: bool,
     flip_y: bool,
 
+    color: [f32;3],
     opacity: f32,
 
     children: Vec<Sprite<I>>,
@@ -54,6 +55,7 @@ impl<I: ImageSize> Sprite<I> {
             flip_x: false,
             flip_y: false,
 
+            color: [1.0, 1.0, 1.0],
             opacity: 1.0,
 
             texture: texture,
@@ -181,6 +183,18 @@ impl<I: ImageSize> Sprite<I> {
         self.opacity = opacity;
     }
 
+    /// Get the sprite's color
+    #[inline(always)]
+    pub fn color(&self) -> [f32;3] {
+        self.color
+    }
+
+    /// Set the sprite's color
+    #[inline(always)]
+    pub fn set_color(&mut self, color: [f32;3]) {
+        self.color = color;
+    }
+
     /// Get the sprite's texture
     #[inline(always)]
     pub fn texture(&self) -> &Rc<I> {
@@ -289,7 +303,7 @@ impl<I: ImageSize> Sprite<I> {
         //model.rgb(1.0, 0.0, 0.0).draw(b);
 
         graphics::Image::new()
-            .set(Color([1.0, 1.0, 1.0, self.opacity]))
+            .set(Color([self.color[0], self.color[1], self.color[2], self.opacity]))
             .set(Rect([-anchor[0], -anchor[1], w, h]))
             .draw(&*self.texture, draw_state, model, b);
 

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use graphics::*;
-use graphics::vecmath::Matrix2d;
+use graphics::{ Graphics, ImageSize };
+use graphics::math::Matrix2d;
 
 use event::GenericEvent;
 use ai_behavior::{
@@ -37,7 +37,7 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Update animation's state
-    pub fn event<E: GenericEvent>(&mut self, e: &E) {
+    pub fn event<E>(&mut self, e: &E) where E: GenericEvent {
         // regenerate the animations and their states
         let running = self.running.clone();
         self.running.clear();
@@ -51,7 +51,7 @@ impl<I: ImageSize> Scene<I> {
                     continue;
                 }
 
-                let sprite = self.child_mut(id.clone()).unwrap();
+                let sprite = self.child_mut(&id).unwrap();
                 let (status, _) = a.event(e, &mut |_, dt, animation, s| {
                     let (state, status, remain) = {
                         let start_state;
@@ -81,16 +81,16 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Render this scene
-    pub fn draw<B: BackEnd<Texture = I>>(&self, t: Matrix2d, b: &mut B) {
+    pub fn draw<B: Graphics<Texture = I>>(&self, t: Matrix2d, b: &mut B) {
         for child in self.children.iter() {
             child.draw(t, b);
         }
     }
 
     /// Register animation with sprite
-    pub fn run(&mut self, sprite_id: Uuid, animation: &Behavior<Animation>) {
+    pub fn run<'b>(&'b mut self, sprite_id: &Uuid, animation: &'b Behavior<Animation>) {
         use std::collections::hash_map::Entry::{ Vacant, Occupied };
-        let animations = match self.running.entry(sprite_id) {
+        let animations = match self.running.entry(sprite_id.clone()) {
             Vacant(entry) => entry.insert(Vec::new()),
             Occupied(entry) => entry.into_mut()
         };
@@ -98,9 +98,9 @@ impl<I: ImageSize> Scene<I> {
         animations.push((animation.clone(), state, false));
     }
 
-    fn find(&self, sprite_id: Uuid, animation: &Behavior<Animation>) -> Option<usize> {
+    fn find(&self, sprite_id: &Uuid, animation: &Behavior<Animation>) -> Option<usize> {
         let mut index = None;
-        if let Some(animations) = self.running.get(&sprite_id) {
+        if let Some(animations) = self.running.get(sprite_id) {
             for i in 0..animations.len() {
                 let (ref b, _, _) = animations[i];
                 if b == animation {
@@ -113,8 +113,8 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Pause a running animation of the sprite
-    pub fn pause(&mut self, sprite_id: Uuid, animation: &Behavior<Animation>) {
-        if let Some(index) = self.find(sprite_id.clone(), animation) {
+    pub fn pause(&mut self, sprite_id: &Uuid, animation: &Behavior<Animation>) {
+        if let Some(index) = self.find(sprite_id, animation) {
             let animations = self.running.get_mut(&sprite_id).unwrap();
             let (b, s, _) = animations.remove(index);
             animations.push((b, s, true));
@@ -122,8 +122,8 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Resume a paused animation of the sprite
-    pub fn resume(&mut self, sprite_id: Uuid, animation: &Behavior<Animation>) {
-        if let Some(index) = self.find(sprite_id.clone(), animation) {
+    pub fn resume(&mut self, sprite_id: &Uuid, animation: &Behavior<Animation>) {
+        if let Some(index) = self.find(sprite_id, animation) {
             let animations = self.running.get_mut(&sprite_id).unwrap();
             let (b, s, _) = animations.remove(index);
             animations.push((b, s, false));
@@ -131,8 +131,8 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Toggle an animation of the sprite
-    pub fn toggle(&mut self, sprite_id: Uuid, animation: &Behavior<Animation>) {
-        if let Some(index) = self.find(sprite_id.clone(), animation) {
+    pub fn toggle(&mut self, sprite_id: &Uuid, animation: &Behavior<Animation>) {
+        if let Some(index) = self.find(sprite_id, animation) {
             let animations = self.running.get_mut(&sprite_id).unwrap();
             let (b, s, paused) = animations.remove(index);
             animations.push((b, s, !paused));
@@ -140,14 +140,14 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Stop a running animation of the sprite
-    pub fn stop(&mut self, sprite_id: Uuid, animation: &Behavior<Animation>) {
-        if let Some(index) = self.find(sprite_id.clone(), animation) {
+    pub fn stop(&mut self, sprite_id: &Uuid, animation: &Behavior<Animation>) {
+        if let Some(index) = self.find(sprite_id, animation) {
             self.running.get_mut(&sprite_id).unwrap().remove(index);
         }
     }
 
     /// Stop all running animations of the sprite
-    pub fn stop_all(&mut self, sprite_id: Uuid) {
+    pub fn stop_all(&mut self, sprite_id: &Uuid) {
         self.running.remove(&sprite_id);
     }
 
@@ -169,7 +169,7 @@ impl<I: ImageSize> Scene<I> {
     }
 
     fn stop_all_including_children(&mut self, sprite: &Sprite<I>) {
-        self.stop_all(sprite.id());
+        self.stop_all(&sprite.id());
         for child in sprite.children().iter() {
             self.stop_all_including_children(child);
         }
@@ -177,8 +177,8 @@ impl<I: ImageSize> Scene<I> {
 
     /// Remove the child by `id` from the scene's children or grandchild
     /// will stop all the animations run by this child
-    pub fn remove_child(&mut self, id: Uuid) -> Option<Sprite<I>> {
-        let removed = if let Some(index) = self.children_index.remove(&id) {
+    pub fn remove_child(&mut self, id: &Uuid) -> Option<Sprite<I>> {
+        let removed = if let Some(index) = self.children_index.remove(id) {
             let removed = self.children.remove(index);
             // Removing a element of vector will alter the index,
             // update the mapping from uuid to index.
@@ -204,8 +204,8 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Find the child by `id` from the scene's children or grandchild
-    pub fn child(&self, id: Uuid) -> Option<&Sprite<I>> {
-        if let Some(index) = self.children_index.get(&id) {
+    pub fn child(&self, id: &Uuid) -> Option<&Sprite<I>> {
+        if let Some(index) = self.children_index.get(id) {
             Some(&self.children[*index])
         } else {
             for child in self.children.iter() {
@@ -218,8 +218,8 @@ impl<I: ImageSize> Scene<I> {
     }
 
     /// Find the child by `id` from this sprite's children or grandchild, mutability
-    pub fn child_mut(&mut self, id: Uuid) -> Option<&mut Sprite<I>> {
-        if let Some(index) = self.children_index.get(&id) {
+    pub fn child_mut(&mut self, id: &Uuid) -> Option<&mut Sprite<I>> {
+        if let Some(index) = self.children_index.get(id) {
             Some(&mut self.children[*index])
         } else {
             for child in self.children.iter_mut() {
